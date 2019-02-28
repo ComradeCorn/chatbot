@@ -1,6 +1,13 @@
 package com.clin.chatbot;
 
+import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -10,6 +17,8 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.Spannable;
@@ -30,6 +39,8 @@ public class MainActivity extends AppCompatActivity {
     private TextToSpeech tts;
     private SpeechRecognizer talkTeller;
     private String output;
+    private boolean connected;
+    private boolean flashStatus;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-
+        flashStatus = false;
         //sets the floating action buttons action to pick up audio and start listening
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -51,31 +62,105 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        //sets the onlaunch message
-        output = ">Hello, welcome to chat bot";
-        setOutput(output);
+        //sets the on launch message
+        String message = ">Hello, welcome to chat bot";
+        setOutput(message);
 
         //initializes text to speech and speech recognizer
         initializeTextToSpeech();
         initializeSpeechRecognizer();
+
+        getPermissions();
+    }
+
+    private void getPermissions() {
+        if (ContextCompat.checkSelfPermission(MainActivity.this,
+                Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(MainActivity.this,
+                    new String[]{Manifest.permission.RECORD_AUDIO}, 5);
+
+        }
+
+        if(ContextCompat.checkSelfPermission(MainActivity.this,
+                Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+
+            ActivityCompat.requestPermissions(MainActivity.this,
+                    new String[]{Manifest.permission.CAMERA}, 5);
+
+        }
     }
 
     private void getResponse(String message) {
+        final boolean hasCameraFlash = getPackageManager().
+                hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+
+        ConnectivityManager connectivityManager = (ConnectivityManager)getSystemService(Context.CONNECTIVITY_SERVICE);
+        if(connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_MOBILE).getState() == NetworkInfo.State.CONNECTED || connectivityManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI).getState() == NetworkInfo.State.CONNECTED) {
+            connected = true;
+        } else
+            connected = false;
+
         String alt = "I'm not sure what you mean";
+
         message = message.toLowerCase();
         if(message.indexOf("open") != -1) {
             if(message.indexOf("browser") != -1 || message.indexOf("web") != -1) {
-                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/"));
-                startActivity(intent);
-                speak("Opening Browser");
-                speak("Opening Browser");
+                if(connected) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/"));
+                    startActivity(intent);
+                    speak("Opening Browser");
+                    setOutput(">Opening Browser...");
+                } else {
+                    speak("You are currently offline");
+                    setOutput(">You are currently offline");
+                }
             } else {
-                speak("what would you like me to open?");
-                setOutput(">what would you like me to open?");
+                speak("What would you like me to open?");
+                setOutput(">What would you like me to open?");
             }
+        } else if(message.indexOf("flashlight") != -1) {
+            if(hasCameraFlash) {
+                if(flashStatus) {
+                    speak("turning off flashlight");
+                    setOutput(">Turning off flashlight...");
+                    lightOff();
+                    flashStatus = false;
+                } else {
+                    speak("turning on flashlight");
+                    setOutput(">Turning on flashlight...");
+                    lightOn();
+                    flashStatus = true;
+                }
+            } else {
+                speak("flashlight is not available");
+                setOutput(">Flashlight is not available");
+            }
+        //if no commands are detected
+        } else if(message.indexOf("hi") != -1 || message.indexOf("hello") != -1 || message.indexOf("hey") != -1) {
+            speak("hi hows it going");
+            setOutput(">Hi hows it going");
         } else {
             speak(alt);
             setOutput((">" + alt));
+        }
+    }
+
+    private void lightOn() {
+        CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            String cameraId = cameraManager.getCameraIdList()[0];
+            cameraManager.setTorchMode(cameraId, true);
+        } catch (CameraAccessException e) {
+        }
+    }
+
+    private void lightOff() {
+        CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            String cameraId = cameraManager.getCameraIdList()[0];
+            cameraManager.setTorchMode(cameraId, false);
+        } catch (CameraAccessException e) {
         }
     }
 
